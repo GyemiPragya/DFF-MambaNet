@@ -138,7 +138,7 @@ class Config:
     # Training hyper-parameters
     # ------------------------------------------------------------------
     BATCH_SIZE = 8
-    NUM_WORKERS = 4
+    NUM_WORKERS = 2
     EPOCHS = 100
     LEARNING_RATE = 1e-4
     WEIGHT_DECAY = 1e-4
