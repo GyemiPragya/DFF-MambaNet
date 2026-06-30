@@ -129,7 +129,7 @@ def tile_dataset(
     patch_counter = 0
 
     for image_path in tqdm(image_paths, desc="Tiling Potsdam tiles"):
-        base_name = os.path.splitext(os.path.basename(image_path))[0]
+        base_name = os.path.splitext(os.path.basename(image_path))[0].replace("_IRRG", "")
         label_path = os.path.join(raw_label_dir, f"{base_name}{label_suffix}{image_ext}")
         if not os.path.exists(label_path):
             # Fall back to a label file sharing the exact same stem.
