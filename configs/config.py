@@ -154,7 +154,7 @@ class Config:
     DICE_WEIGHT = 0.5                # weight of Dice inside the hybrid loss
     CLASS_WEIGHTS = None              # optional list[float] of length NUM_CLASSES
 
-    USE_AMP = True                    # mixed precision training
+    USE_AMP = False                   # mixed precision training
     GRAD_CLIP_NORM = 5.0
     EARLY_STOPPING_PATIENCE = 15
     EARLY_STOPPING_MIN_DELTA = 1e-4
