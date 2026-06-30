@@ -140,7 +140,7 @@ class Config:
     BATCH_SIZE = 8
     NUM_WORKERS = 4
     EPOCHS = 100
-    LEARNING_RATE = 3e-4
+    LEARNING_RATE = 1e-4
     WEIGHT_DECAY = 1e-4
     OPTIMIZER = "adamw"              # one of: "adamw", "sgd"
     SGD_MOMENTUM = 0.9
