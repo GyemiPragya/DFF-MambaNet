@@ -234,63 +234,63 @@ class SimpleSelectiveSSM(nn.Module):
             d *= 2
         return b_run
 
+    
     @staticmethod
-   @staticmethod
-def _selective_scan(
-    x: torch.Tensor,
-    delta: torch.Tensor,
-    A: torch.Tensor,
-    B: torch.Tensor,
-    C: torch.Tensor,
-    D: torch.Tensor,
-    chunk_size: int = 32,
-) -> torch.Tensor:
-
-    batch, length, d_inner = x.shape
-    d_state = A.shape[1]
-
-    # -----------------------------
-    # 1. SAFE DISCRETIZATION
-    # -----------------------------
-    delta = torch.clamp(delta, min=1e-4, max=1.0)
-
-    raw = delta.unsqueeze(-1) * A.view(1, 1, d_inner, d_state)
-
-    # prevent exp overflow/underflow
-    raw = torch.clamp(raw, min=-20, max=2)
-
-    delta_A = torch.exp(raw)
-
-    # normalize A to avoid multiplicative explosion
-    delta_A = delta_A / (delta_A.sum(dim=-1, keepdim=True) + 1e-6)
-
-    # -----------------------------
-    # 2. SAFE INPUT TERM
-    # -----------------------------
-    delta_Bx = (delta.unsqueeze(-1) * B.unsqueeze(2)) * x.unsqueeze(-1)
-
-    # remove inf/nan early
-    delta_Bx = torch.nan_to_num(delta_Bx, nan=0.0, posinf=0.0, neginf=0.0)
-
-    # -----------------------------
-    # 3. STABLE SCAN
-    # -----------------------------
-    h_all = SimpleSelectiveSSM._parallel_affine_scan(delta_A, delta_Bx)
-
-    # cleanup after scan
-    h_all = torch.nan_to_num(h_all, nan=0.0, posinf=0.0, neginf=0.0)
-
-    # -----------------------------
-    # 4. OUTPUT PROJECTION
-    # -----------------------------
-    y = torch.einsum("bldn,bln->bld", h_all, C)
-
-    y = y + x * D.view(1, 1, d_inner)
-
-    # final safety clamp
-    y = torch.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
-
-    return y
+    def _selective_scan(
+				    x: torch.Tensor,
+				    delta: torch.Tensor,
+				    A: torch.Tensor,
+				    B: torch.Tensor,
+				    C: torch.Tensor,
+				    D: torch.Tensor,
+				    chunk_size: int = 32,
+				) -> torch.Tensor:
+				
+				    batch, length, d_inner = x.shape
+				    d_state = A.shape[1]
+				
+				    # -----------------------------
+				    # 1. SAFE DISCRETIZATION
+				    # -----------------------------
+				    delta = torch.clamp(delta, min=1e-4, max=1.0)
+				
+				    raw = delta.unsqueeze(-1) * A.view(1, 1, d_inner, d_state)
+				
+				    # prevent exp overflow/underflow
+				    raw = torch.clamp(raw, min=-20, max=2)
+				
+				    delta_A = torch.exp(raw)
+				
+				    # normalize A to avoid multiplicative explosion
+				    delta_A = delta_A / (delta_A.sum(dim=-1, keepdim=True) + 1e-6)
+				
+				    # -----------------------------
+				    # 2. SAFE INPUT TERM
+				    # -----------------------------
+				    delta_Bx = (delta.unsqueeze(-1) * B.unsqueeze(2)) * x.unsqueeze(-1)
+				
+				    # remove inf/nan early
+				    delta_Bx = torch.nan_to_num(delta_Bx, nan=0.0, posinf=0.0, neginf=0.0)
+				
+				    # -----------------------------
+				    # 3. STABLE SCAN
+				    # -----------------------------
+				    h_all = SimpleSelectiveSSM._parallel_affine_scan(delta_A, delta_Bx)
+				
+				    # cleanup after scan
+				    h_all = torch.nan_to_num(h_all, nan=0.0, posinf=0.0, neginf=0.0)
+				
+				    # -----------------------------
+				    # 4. OUTPUT PROJECTION
+				    # -----------------------------
+				    y = torch.einsum("bldn,bln->bld", h_all, C)
+				
+				    y = y + x * D.view(1, 1, d_inner)
+				
+				    # final safety clamp
+				    y = torch.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+				
+				    return y
 class VisionMambaBlock(nn.Module):
     """A single Vision Mamba block: LayerNorm -> bidirectional SSM -> residual,
     followed by a LayerNorm -> MLP -> residual (standard transformer-style
