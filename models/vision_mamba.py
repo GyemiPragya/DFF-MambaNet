@@ -229,8 +229,8 @@ class SimpleSelectiveSSM(nn.Module):
         while d < length:
             a_left = F.pad(a_run[:, : length - d], (0, 0, 0, 0, d, 0), value=1.0)
             b_left = F.pad(b_run[:, : length - d], (0, 0, 0, 0, d, 0), value=0.0)
+            a_run = torch.clamp(a_run * a_left, max=1.0)
             b_run = a_run * b_left + b_run
-            a_run = a_run * a_left
             d *= 2
         return b_run
 
@@ -277,6 +277,9 @@ class SimpleSelectiveSSM(nn.Module):
         # Discretize: A_bar_t = exp(delta_t * A) in (0, 1]; B_bar_t * x_t.
         delta_A = torch.exp(delta.unsqueeze(-1) * A.view(1, 1, d_inner, d_state))
         delta_Bx = (delta.unsqueeze(-1) * B.unsqueeze(2)) * x.unsqueeze(-1)
+
+        assert torch.isfinite(delta_A).all()
+        assert torch.isfinite(delta_Bx).all()
 
         h_all = SimpleSelectiveSSM._parallel_affine_scan(delta_A, delta_Bx)
 
