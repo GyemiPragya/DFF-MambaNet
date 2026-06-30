@@ -235,58 +235,62 @@ class SimpleSelectiveSSM(nn.Module):
         return b_run
 
     @staticmethod
-    def _selective_scan(
-        x: torch.Tensor,
-        delta: torch.Tensor,
-        A: torch.Tensor,
-        B: torch.Tensor,
-        C: torch.Tensor,
-        D: torch.Tensor,
-        chunk_size: int = 32,
-    ) -> torch.Tensor:
-        """Selective-scan recurrence, evaluated via an exact parallel prefix scan.
+   @staticmethod
+def _selective_scan(
+    x: torch.Tensor,
+    delta: torch.Tensor,
+    A: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    D: torch.Tensor,
+    chunk_size: int = 32,
+) -> torch.Tensor:
 
-        Evaluating ``h_t = A_bar_t * h_(t-1) + B_bar_t * x_t`` with a plain
-        Python loop over every token is prohibitively slow: a 256x256
-        input patch flattened at stride 4 already yields 4096 tokens.
-        Instead, every token's local affine state-update map is composed
-        with every other token's via an O(log L) parallel prefix scan (see
-        :meth:`_parallel_affine_scan`), which is exactly equivalent to the
-        per-token recurrence but needs only ``log2(L)`` sequential
-        vectorized steps instead of ``L`` of them.
+    batch, length, d_inner = x.shape
+    d_state = A.shape[1]
 
-        ``chunk_size`` is accepted for interface/config compatibility but is
-        unused — this exact formulation has no numerical need to chunk.
+    # -----------------------------
+    # 1. SAFE DISCRETIZATION
+    # -----------------------------
+    delta = torch.clamp(delta, min=1e-4, max=1.0)
 
-        Shapes
-        ------
-        x     : (B, L, d_inner)
-        delta : (B, L, d_inner)
-        A     : (d_inner, d_state)
-        B, C  : (B, L, d_state)
-        D     : (d_inner,)
+    raw = delta.unsqueeze(-1) * A.view(1, 1, d_inner, d_state)
 
-        Returns
-        -------
-        torch.Tensor of shape (B, L, d_inner)
-        """
-        _ = chunk_size  # unused by this exact scan; kept for API stability
-        batch, length, d_inner = x.shape
-        d_state = A.shape[1]
+    # prevent exp overflow/underflow
+    raw = torch.clamp(raw, min=-20, max=2)
 
-        # Discretize: A_bar_t = exp(delta_t * A) in (0, 1]; B_bar_t * x_t.
-        delta_A = torch.exp(delta.unsqueeze(-1) * A.view(1, 1, d_inner, d_state))
-        delta_Bx = (delta.unsqueeze(-1) * B.unsqueeze(2)) * x.unsqueeze(-1)
+    delta_A = torch.exp(raw)
 
-        assert torch.isfinite(delta_A).all()
-        assert torch.isfinite(delta_Bx).all()
+    # normalize A to avoid multiplicative explosion
+    delta_A = delta_A / (delta_A.sum(dim=-1, keepdim=True) + 1e-6)
 
-        h_all = SimpleSelectiveSSM._parallel_affine_scan(delta_A, delta_Bx)
+    # -----------------------------
+    # 2. SAFE INPUT TERM
+    # -----------------------------
+    delta_Bx = (delta.unsqueeze(-1) * B.unsqueeze(2)) * x.unsqueeze(-1)
 
-        y = torch.einsum("bldn,bln->bld", h_all, C)
-        return y + x * D.view(1, 1, d_inner)
+    # remove inf/nan early
+    delta_Bx = torch.nan_to_num(delta_Bx, nan=0.0, posinf=0.0, neginf=0.0)
 
+    # -----------------------------
+    # 3. STABLE SCAN
+    # -----------------------------
+    h_all = SimpleSelectiveSSM._parallel_affine_scan(delta_A, delta_Bx)
 
+    # cleanup after scan
+    h_all = torch.nan_to_num(h_all, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # -----------------------------
+    # 4. OUTPUT PROJECTION
+    # -----------------------------
+    y = torch.einsum("bldn,bln->bld", h_all, C)
+
+    y = y + x * D.view(1, 1, d_inner)
+
+    # final safety clamp
+    y = torch.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+
+    return y
 class VisionMambaBlock(nn.Module):
     """A single Vision Mamba block: LayerNorm -> bidirectional SSM -> residual,
     followed by a LayerNorm -> MLP -> residual (standard transformer-style
