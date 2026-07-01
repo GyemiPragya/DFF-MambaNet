@@ -229,8 +229,11 @@ class SimpleSelectiveSSM(nn.Module):
         while d < length:
             a_left = F.pad(a_run[:, : length - d], (0, 0, 0, 0, d, 0), value=1.0)
             b_left = F.pad(b_run[:, : length - d], (0, 0, 0, 0, d, 0), value=0.0)
-            a_run = torch.clamp(a_run * a_left, max=1.0)
-            b_run = a_run * b_left + b_run
+            new_a = torch.clamp(a_run * a_left, max=1.0)
+			new_b = a_run * b_left + b_run
+			
+			a_run = new_a
+			b_run = new_b
             d *= 2
         return b_run
 
@@ -257,12 +260,12 @@ class SimpleSelectiveSSM(nn.Module):
 				    raw = delta.unsqueeze(-1) * A.view(1, 1, d_inner, d_state)
 				
 				    # prevent exp overflow/underflow
-				    raw = torch.clamp(raw, min=-20, max=2)
+				    raw = torch.clamp(raw, min=-20, max=0)
 				
 				    delta_A = torch.exp(raw)
 				
-				    # normalize A to avoid multiplicative explosion
-				    delta_A = delta_A / (delta_A.sum(dim=-1, keepdim=True) + 1e-6)
+				    
+					
 				
 				    # -----------------------------
 				    # 2. SAFE INPUT TERM
