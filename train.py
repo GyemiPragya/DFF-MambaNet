@@ -122,16 +122,42 @@ def train_one_epoch(model, loader, optimizer, loss_fn, scaler, device, config, e
 
         with autocast(device_type=amp_device_type, enabled=config.USE_AMP):
             logits = model(images)
+
+            ### DEBUG ###
+            if torch.isnan(logits).any():
+                print(f"\n🚨 NaN detected in LOGITS at epoch {epoch}, step {step}")
+                return float("nan")
+
             loss = loss_fn(logits, masks)
+
+            ### DEBUG ###
+            if torch.isnan(loss):
+                print(f"\n🚨 NaN LOSS at epoch {epoch}, step {step}")
+                return float("nan")
 
         if config.USE_AMP:
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
+
+            ### DEBUG ###
+            for name, p in model.named_parameters():
+                if p.grad is not None and torch.isnan(p.grad).any():
+                    print(f"\n🚨 NaN gradient in {name}")
+                    return float("nan")
+
             torch.nn.utils.clip_grad_norm_(model.parameters(), config.GRAD_CLIP_NORM)
             scaler.step(optimizer)
             scaler.update()
+
         else:
             loss.backward()
+
+            ### DEBUG ###
+            for name, p in model.named_parameters():
+                if p.grad is not None and torch.isnan(p.grad).any():
+                    print(f"\n🚨 NaN gradient in {name}")
+                    return float("nan")
+
             torch.nn.utils.clip_grad_norm_(model.parameters(), config.GRAD_CLIP_NORM)
             optimizer.step()
 
@@ -159,7 +185,13 @@ def validate(model, loader, loss_fn, device, config, epoch, writer, metrics: Seg
 
         with autocast(device_type=amp_device_type, enabled=config.USE_AMP):
             logits = model(images)
+            if torch.isnan(logits).any():                    
+               print(f"\n🚨 NaN logits during validation at epoch {epoch}")
+               return float("nan"), metrics.compute()
             loss = loss_fn(logits, masks)
+            if torch.isnan(loss):
+               print(f"\n🚨 NaN validation loss at epoch {epoch}")
+               return float("nan"), metrics.compute()
 
         preds = logits.argmax(dim=1)
         metrics.update(preds, masks)
